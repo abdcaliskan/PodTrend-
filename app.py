@@ -40,13 +40,17 @@ def get_secret(key: str) -> str:
     return ""
 
 
-@st.cache_data(ttl=300)
-def load_dashboard_data() -> tuple[pd.DataFrame, pd.DataFrame, str]:
-    """Loads Niche_Scorecard and Winning_Tags from Google Sheets, local CSVs, or fallback sample."""
+from extract import extract_all
+from transform import transform_data
+
+
+@st.cache_data(ttl=3600)
+def load_dashboard_data(force_live: bool = False) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Loads Niche_Scorecard and Winning_Tags from Google Sheets, local CSVs, or live extraction."""
     sheet_id = get_secret("GOOGLE_SHEET_ID")
     creds_raw = get_secret("GOOGLE_SERVICE_ACCOUNT_JSON")
 
-    if sheet_id and creds_raw:
+    if sheet_id and creds_raw and not force_live:
         try:
             import gspread
             from google.oauth2.service_account import Credentials
@@ -70,25 +74,13 @@ def load_dashboard_data() -> tuple[pd.DataFrame, pd.DataFrame, str]:
 
     sc_csv = OUTPUT_DIR / "niche_scorecard.csv"
     wt_csv = OUTPUT_DIR / "winning_tags.csv"
-    if sc_csv.exists() and wt_csv.exists():
-        return pd.read_csv(sc_csv), pd.read_csv(wt_csv), "Yerel CSV (output/)"
+    if sc_csv.exists() and not force_live:
+        wt_df = pd.read_csv(wt_csv) if wt_csv.exists() else pd.DataFrame()
+        return pd.read_csv(sc_csv), wt_df, "Canlı ETL Çıktısı (output/niche_scorecard.csv)"
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    sample_sc = pd.DataFrame([
-        {"date": today, "niche": "2027 daily planner hardcover", "total_competition": 2400, "avg_price_usd": 30.4, "trend_slope_90d": 3.33, "fresh_winners_count": 10, "opportunity_score": 88.3},
-        {"date": today, "niche": "2027 vision board poster", "total_competition": 1850, "avg_price_usd": 26.4, "trend_slope_90d": -3.11, "fresh_winners_count": 10, "opportunity_score": 85.0},
-        {"date": today, "niche": "retro tennis club sweatshirt", "total_competition": 3200, "avg_price_usd": 44.9, "trend_slope_90d": 0.0, "fresh_winners_count": 10, "opportunity_score": 85.0},
-        {"date": today, "niche": "sunday league football shirt", "total_competition": 2100, "avg_price_usd": 26.9, "trend_slope_90d": 0.0, "fresh_winners_count": 9, "opportunity_score": 85.0},
-        {"date": today, "niche": "minimalist manifestation journal", "total_competition": 112000, "avg_price_usd": 20.9, "trend_slope_90d": -1.59, "fresh_winners_count": 0, "opportunity_score": 15.1},
-    ])
-    sample_wt = pd.DataFrame([
-        {"date": today, "niche": "2027 daily planner hardcover", "tag": "2027 planner", "frequency": 10},
-        {"date": today, "niche": "2027 daily planner hardcover", "tag": "hardcover planner", "frequency": 10},
-        {"date": today, "niche": "2027 daily planner hardcover", "tag": "daily organizer", "frequency": 10},
-        {"date": today, "niche": "2027 vision board poster", "tag": "2027 vision board", "frequency": 10},
-        {"date": today, "niche": "2027 vision board poster", "tag": "vision board poster", "frequency": 10},
-    ])
-    return sample_sc, sample_wt, "Son Çıktı / Örnek Veri"
+    extracted = extract_all()
+    sc_df, wt_df = transform_data(extracted, blacklist_path=BASE_DIR / "trademark_blacklist.txt")
+    return sc_df, wt_df, "Canlı API Taraması (Google Trends + Gelato)"
 
 
 BASE_CSS = """
@@ -376,15 +368,19 @@ def render_api_status_table() -> None:
 
 
 def main() -> None:
-    sc_df, wt_df, source_label = load_dashboard_data()
+    if "force_live" not in st.session_state:
+        st.session_state.force_live = False
 
-    col_title, col_btn = st.columns([4, 1])
+    sc_df, wt_df, source_label = load_dashboard_data(force_live=st.session_state.force_live)
+
+    col_title, col_btn = st.columns([3.5, 1.5])
     with col_title:
         st.title("📊 POD & Etsy — Canlı Ekip Dashboard")
         st.caption(f"Veri Kaynağı: **{source_label}** • Tüm ekip (Sen, Reyna, TR Mağaza) için ortak takip ekranı")
     with col_btn:
-        if st.button("🔄 Veriyi Yenile", use_container_width=True):
+        if st.button("🔄 Canlı Tara (Google Trends)", use_container_width=True):
             st.cache_data.clear()
+            st.session_state.force_live = True
             st.rerun()
 
     if sc_df.empty:
