@@ -74,9 +74,17 @@ def load_dashboard_data(force_live: bool = False) -> tuple[pd.DataFrame, pd.Data
 
     sc_csv = OUTPUT_DIR / "niche_scorecard.csv"
     wt_csv = OUTPUT_DIR / "winning_tags.csv"
-    if sc_csv.exists() and sc_csv.stat().st_size > 0 and not force_live:
-        wt_df = pd.read_csv(wt_csv) if (wt_csv.exists() and wt_csv.stat().st_size > 0) else pd.DataFrame()
-        return pd.read_csv(sc_csv), wt_df, "Canlı ETL Çıktısı (output/niche_scorecard.csv)"
+    if sc_csv.exists() and not force_live:
+        try:
+            sc_df = pd.read_csv(sc_csv)
+        except pd.errors.EmptyDataError:
+            sc_df = pd.DataFrame()
+        try:
+            wt_df = pd.read_csv(wt_csv) if wt_csv.exists() else pd.DataFrame()
+        except pd.errors.EmptyDataError:
+            wt_df = pd.DataFrame()
+        if not sc_df.empty:
+            return sc_df, wt_df, "Canlı ETL Çıktısı (output/niche_scorecard.csv)"
 
     extracted = extract_all()
     sc_df, wt_df = transform_data(extracted, blacklist_path=BASE_DIR / "trademark_blacklist.txt")
