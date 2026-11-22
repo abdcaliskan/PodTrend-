@@ -470,6 +470,135 @@ def render_seasonality_chart(df: pd.DataFrame) -> None:
     components.html(html, height=400)
 
 
+def render_architecture_diagram() -> None:
+    """Renders the full 4-column technical + 5-step business architecture diagram."""
+    etsy_ok = bool(get_secret("ETSY_API_KEY"))
+    pin_ok = bool(get_secret("PINTEREST_ACCESS_TOKEN"))
+    gelato_ok = bool(get_secret("GELATO_API_KEY"))
+    gs_ok = bool(get_secret("GOOGLE_SHEET_ID"))
+
+    html = f"""<!DOCTYPE html><html><head><style>
+    {BASE_CSS}
+    .arch {{
+      display: grid;
+      grid-template-columns: 1.15fr 28px 1fr 28px 1fr 28px 1.15fr;
+      align-items: stretch;
+      gap: 6px;
+      margin-bottom: 16px;
+    }}
+    .col {{
+      background: #131c31;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }}
+    .col-title {{
+      font-size: 11.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #f97316;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      padding-bottom: 7px;
+    }}
+    .node {{
+      background: #1b2742;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 10px;
+      padding: 9px 11px;
+    }}
+    .node-head {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+      font-weight: 700;
+      margin-bottom: 3px;
+    }}
+    .node p {{ font-size: 11.5px; color: #94a3b8; line-height: 1.4; margin: 0; }}
+    .arrow {{ display: flex; align-items: center; justify-content: center; color: #38bdf8; font-size: 20px; font-weight: 900; }}
+    .biz {{
+      background: #131c31;
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }}
+    .biz-title {{
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #22c55e;
+      margin-bottom: 10px;
+    }}
+    .biz-flow {{
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+    }}
+    .biz-step {{
+      background: #1b2742;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 10px;
+      padding: 10px;
+    }}
+    .biz-step strong {{ display: block; font-size: 12px; margin-bottom: 4px; color: #f8fafc; }}
+    .biz-step span {{ font-size: 11px; color: #94a3b8; line-height: 1.38; display: block; }}
+    @media (max-width: 900px) {{
+      .arch, .biz-flow {{ grid-template-columns: 1fr; }}
+      .arrow {{ display: none; }}
+    }}
+    </style></head><body>
+      <div class="arch">
+        <div class="col">
+          <div class="col-title">1. Veri Kaynakları (Extract)</div>
+          <div class="node"><div class="node-head"><span>Google Trends</span><span class="badge ok">CANLI</span></div><p>Seed kategorilerden son 90g yükselen aramalar + 12 aylık mevsimsellik.</p></div>
+          <div class="node"><div class="node-head"><span>Gelato Seller API</span><span class="badge {'ok' if gelato_ok else 'missing'}">{'CANLI' if gelato_ok else 'SECRET EKSİK'}</span></div><p>Gerçek ürün katalogları, ABD/AB üretim yerleri ve maliyetler.</p></div>
+          <div class="node"><div class="node-head"><span>Etsy Open API v3</span><span class="badge {'ok' if etsy_ok else 'pending'}">{'CANLI' if etsy_ok else 'MAĞAZA BEKLİYOR'}</span></div><p>Mağaza açılınca: rakip sayısı, ort. fiyat, taze favoriler ve 13 etiket.</p></div>
+          <div class="node"><div class="node-head"><span>Pinterest Trends v5</span><span class="badge {'ok' if pin_ok else 'pending'}">{'CANLI' if pin_ok else 'ONAY BEKLİYOR'}</span></div><p>Trial onaylanınca: Etsy öncesi erken görsel trend sinyalleri.</p></div>
+          <div class="node"><div class="node-head"><span>eBay & Reddit</span><span class="badge mid">OPSİYONEL</span></div><p>Çapraz fiyat kontrolü ve topluluk niş fikirleri.</p></div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="col">
+          <div class="col-title">2. İşleme & Otomasyon</div>
+          <div class="node"><div class="node-head"><span>GitHub Actions</span><span class="badge ok">0 € / CRON</span></div><p>Her gece TSİ 04:00'te `main.py` otomatik çalışır.</p></div>
+          <div class="node"><div class="node-head"><span>Telif Filtresi</span><span class="badge ok">AKTİF</span></div><p>Kulüp, dizi ve marka isimlerini kara listeden otomatik eler.</p></div>
+          <div class="node"><div class="node-head"><span>Opportunity Score</span><span class="badge ok">0–100</span></div><p>Talep hızı, rekabet, fiyat marjı ve taze kazanan sinyali.</p></div>
+          <div class="node"><div class="node-head"><span>Tag Madenciliği</span><span class="badge ok">TOP 13</span></div><p>En çok satan ilanlardan ≤20 karakterli en iyi 13 Etsy etiketi.</p></div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="col">
+          <div class="col-title">3. Veri Depolama (Load)</div>
+          <div class="node"><div class="node-head"><span>Google Sheets</span><span class="badge {'ok' if gs_ok else 'pending'}">{'CANLI' if gs_ok else 'SECRET EKLE'}</span></div><p>`podtrend-bot` ile günlük `Niche_Scorecard` ve `Winning_Tags` sekmeleri. (0 €)</p></div>
+          <div class="node"><div class="node-head"><span>CSV & SQLite</span><span class="badge ok">AKTİF</span></div><p>`output/*.csv` yedekleri ve `pod_warehouse.db` haftalık değişim geçmişi.</p></div>
+          <div class="node"><div class="node-head"><span>GitHub Repo</span><span class="badge ok">AKTİF</span></div><p>Kod merkezi; `.env` ve `service_account.json` `.gitignore` ile gizli.</p></div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="col">
+          <div class="col-title">4. Ekip Ekranı & Karar</div>
+          <div class="node"><div class="node-head"><span>Streamlit Cloud</span><span class="badge ok">CANLI LINK</span></div><p>Ekip telefondan/bilgisayardan Google Sheet verisini canlı izler.</p></div>
+          <div class="node"><div class="node-head"><span>12 Ay Mevsimsellik</span><span class="badge ok">AKTİF</span></div><p>52 haftalık SVG grafikle nişin zirve yaptığı ayları gösterir.</p></div>
+          <div class="node"><div class="node-head"><span>Hazır Etiketler</span><span class="badge ok">AKTİF</span></div><p>Seçilen nişin 13 SEO etiketini tek tıkla kopyalar.</p></div>
+        </div>
+      </div>
+
+      <div class="biz">
+        <div class="biz-title">5. Gerçek Dünya Satış, Baskı ve Para Akışı (Ekip Operasyonu)</div>
+        <div class="biz-flow">
+          <div class="biz-step"><strong>1. Trend Seçimi (Sen)</strong><span>Yüksek skorlu nişi seçer, Reyna'ya tasarım brief'i verirsin.</span></div>
+          <div class="biz-step"><strong>2. Tasarım (Reyna)</strong><span>Canva/Kittl/Procreate ile özgün tasarım + şık mockup hazırlar.</span></div>
+          <div class="biz-step"><strong>3. Listeleme (Gelato)</strong><span>Gelato'ya ücretsiz yüklenir, Etsy'ye otomatik aktarılır (0% ekstra komisyon).</span></div>
+          <div class="biz-step"><strong>4. Yerel Baskı & Kargo</strong><span>ABD/AB müşterisi ~30$ öder; yerel matbaa 3–5 günde basıp yollar.</span></div>
+          <div class="biz-step"><strong>5. Kâr (TR - Annesi)</strong><span>Maliyet + Etsy kesintisi sonrası ~10–11$ net kâr TR hesabına yatar.</span></div>
+        </div>
+      </div>
+    </body></html>"""
+    components.html(html, height=690)
+
+
 def main() -> None:
     if "force_live" not in st.session_state:
         st.session_state.force_live = False
@@ -490,71 +619,79 @@ def main() -> None:
         st.info("Henüz niş verisi bulunmuyor.")
         return
 
-    latest_date = str(sc_df["date"].max()) if "date" in sc_df.columns else "-"
-    latest_df = sc_df[sc_df["date"].astype(str) == latest_date].copy() if "date" in sc_df.columns else sc_df.copy()
+    tab_dash, tab_arch = st.tabs(["📊 Canlı Dashboard", "🗺️ Sistem & Veri Mimarisi"])
 
-    k1, k2, k3, k4 = st.columns(4)
-    top_row = latest_df.sort_values("opportunity_score", ascending=False).iloc[0]
-    k1.metric("Son Çalışma Tarihi", latest_date, "Sistem Güncel")
-    k2.metric("Keşfedilen Trend", len(latest_df))
-    k3.metric("En Yüksek Skor", f"{top_row['opportunity_score']} / 100", str(top_row["niche"]))
-    numeric_prices = pd.to_numeric(latest_df.get("avg_price_usd"), errors="coerce").dropna()
-    k4.metric("Ortalama Etsy Fiyatı", f"${numeric_prices.mean():.2f}" if not numeric_prices.empty else "Pending Etsy API", "Hedef: $24+")
+    with tab_arch:
+        st.subheader("🗺️ Uçtan Uca PodTrend Sistem & Veri Mimarisi")
+        st.caption("Veri kaynaklarından otomatik ETL'e, Google Sheets'ten satış ve para döngüsüne kadar tüm akış:")
+        render_architecture_diagram()
 
-    st.subheader("⚙️ Canlı ETL Akış Durumu (Extract → Transform → Load)")
-    api_states = {
-        "Gelato Catalog API": ("AKTİF" if get_secret("GELATO_API_KEY") else "EKSİK", "OK" if get_secret("GELATO_API_KEY") else "MISSING"),
-        "Google Trends (90g)": ("AKTİF (Keysiz)", "OK"),
-        "Pinterest Trends v5": ("AKTİF" if get_secret("PINTEREST_ACCESS_TOKEN") else "ONAY BEKLİYOR", "OK" if get_secret("PINTEREST_ACCESS_TOKEN") else "PENDING"),
-        "Etsy Open API v3": ("AKTİF" if get_secret("ETSY_API_KEY") else "MAĞAZA BEKLİYOR", "OK" if get_secret("ETSY_API_KEY") else "MISSING"),
-        "eBay & Reddit API": ("AKTİF" if get_secret("EBAY_ACCESS_TOKEN") else "OPSİYONEL", "OK" if get_secret("EBAY_ACCESS_TOKEN") else "PENDING"),
-    }
-    render_animated_etl_flow(api_states)
+    with tab_dash:
+        latest_date = str(sc_df["date"].max()) if "date" in sc_df.columns else "-"
+        latest_df = sc_df[sc_df["date"].astype(str) == latest_date].copy() if "date" in sc_df.columns else sc_df.copy()
 
-    with st.expander("🔑 Eksik veya Onay Sürecindeki API'ler (Takım Durumu)", expanded=False):
-        render_api_status_table()
+        k1, k2, k3, k4 = st.columns(4)
+        top_row = latest_df.sort_values("opportunity_score", ascending=False).iloc[0]
+        k1.metric("Son Çalışma Tarihi", latest_date, "Sistem Güncel")
+        k2.metric("Keşfedilen Trend", len(latest_df))
+        k3.metric("En Yüksek Skor", f"{top_row['opportunity_score']} / 100", str(top_row["niche"]))
+        numeric_prices = pd.to_numeric(latest_df.get("avg_price_usd"), errors="coerce").dropna()
+        k4.metric("Ortalama Etsy Fiyatı", f"${numeric_prices.mean():.2f}" if not numeric_prices.empty else "Pending Etsy API", "Hedef: $24+")
 
-    st.subheader("📈 Niş Skorları & Sonuç Tablosu")
-    c_filter1, c_filter2 = st.columns([2, 1])
-    with c_filter1:
-        search_q = st.text_input("Niş Ara", placeholder="Örn: planner, vision, tennis...")
-    with c_filter2:
-        min_score = st.slider("Minimum Fırsat Skoru", 0, 100, 0)
+        st.subheader("⚙️ Canlı ETL Akış Durumu (Extract → Transform → Load)")
+        api_states = {
+            "Gelato Catalog API": ("AKTİF" if get_secret("GELATO_API_KEY") else "EKSİK", "OK" if get_secret("GELATO_API_KEY") else "MISSING"),
+            "Google Trends (90g)": ("AKTİF (Keysiz)", "OK"),
+            "Pinterest Trends v5": ("AKTİF" if get_secret("PINTEREST_ACCESS_TOKEN") else "ONAY BEKLİYOR", "OK" if get_secret("PINTEREST_ACCESS_TOKEN") else "PENDING"),
+            "Etsy Open API v3": ("AKTİF" if get_secret("ETSY_API_KEY") else "MAĞAZA BEKLİYOR", "OK" if get_secret("ETSY_API_KEY") else "MISSING"),
+            "eBay & Reddit API": ("AKTİF" if get_secret("EBAY_ACCESS_TOKEN") else "OPSİYONEL", "OK" if get_secret("EBAY_ACCESS_TOKEN") else "PENDING"),
+        }
+        render_animated_etl_flow(api_states)
 
-    filtered = latest_df[
-        (latest_df["opportunity_score"] >= min_score)
-        & (latest_df["niche"].astype(str).str.lower().str.contains(search_q.lower().strip()))
-    ].sort_values("opportunity_score", ascending=False)
+        with st.expander("🔑 Eksik veya Onay Sürecindeki API'ler (Takım Durumu)", expanded=False):
+            render_api_status_table()
 
-    render_scorecard_visuals(filtered)
+        st.subheader("📈 Niş Skorları & Sonuç Tablosu")
+        c_filter1, c_filter2 = st.columns([2, 1])
+        with c_filter1:
+            search_q = st.text_input("Niş Ara", placeholder="Örn: planner, vision, tennis...")
+        with c_filter2:
+            min_score = st.slider("Minimum Fırsat Skoru", 0, 100, 0)
 
-    st.subheader("📅 12 Aylık Mevsimsellik (Seasonality) Analizi")
-    st.caption("Seçtiğin nişlerin son 12 ayda (52 hafta) hangi aylarda zirve yaptığını canlı Google Trends üzerinden karşılaştır.")
-    all_niches = latest_df["niche"].astype(str).tolist()
-    default_picks = all_niches[:3] if len(all_niches) >= 3 else all_niches
-    selected_season_niches = st.multiselect(
-        "Karşılaştırılacak Nişler (En fazla 4 adet)",
-        options=all_niches,
-        default=default_picks,
-        max_selections=4,
-    )
-    if selected_season_niches:
-        season_df, season_err = fetch_yearly_seasonality(tuple(selected_season_niches))
-        if season_err:
-            st.warning(season_err)
+        filtered = latest_df[
+            (latest_df["opportunity_score"] >= min_score)
+            & (latest_df["niche"].astype(str).str.lower().str.contains(search_q.lower().strip()))
+        ].sort_values("opportunity_score", ascending=False)
+
+        render_scorecard_visuals(filtered)
+
+        st.subheader("📅 12 Aylık Mevsimsellik (Seasonality) Analizi")
+        st.caption("Seçtiğin nişlerin son 12 ayda (52 hafta) hangi aylarda zirve yaptığını canlı Google Trends üzerinden karşılaştır.")
+        all_niches = latest_df["niche"].astype(str).tolist()
+        default_picks = all_niches[:3] if len(all_niches) >= 3 else all_niches
+        selected_season_niches = st.multiselect(
+            "Karşılaştırılacak Nişler (En fazla 4 adet)",
+            options=all_niches,
+            default=default_picks,
+            max_selections=4,
+        )
+        if selected_season_niches:
+            season_df, season_err = fetch_yearly_seasonality(tuple(selected_season_niches))
+            if season_err:
+                st.warning(season_err)
+            else:
+                render_seasonality_chart(season_df)
+
+        st.subheader("🏷️ Reyna İçin Hazır Etiketler (Winning Tags)")
+        niche_options = filtered["niche"].tolist() if not filtered.empty else latest_df["niche"].tolist()
+        selected_niche = st.selectbox("Niş Seç", niche_options)
+        if selected_niche and not wt_df.empty and "niche" in wt_df.columns:
+            niche_tags = wt_df[wt_df["niche"] == selected_niche].sort_values("frequency", ascending=False)
+            tags_list = niche_tags["tag"].astype(str).tolist()[:13]
+            st.write("Etsy'ye doğrudan yapıştırmak için (sağ üstten kopyala):")
+            st.code(", ".join(tags_list), language=None)
         else:
-            render_seasonality_chart(season_df)
-
-    st.subheader("🏷️ Reyna İçin Hazır Etiketler (Winning Tags)")
-    niche_options = filtered["niche"].tolist() if not filtered.empty else latest_df["niche"].tolist()
-    selected_niche = st.selectbox("Niş Seç", niche_options)
-    if selected_niche and not wt_df.empty and "niche" in wt_df.columns:
-        niche_tags = wt_df[wt_df["niche"] == selected_niche].sort_values("frequency", ascending=False)
-        tags_list = niche_tags["tag"].astype(str).tolist()[:13]
-        st.write("Etsy'ye doğrudan yapıştırmak için (sağ üstten kopyala):")
-        st.code(", ".join(tags_list), language=None)
-    else:
-        st.info("Etsy Winning Tags verisi `ETSY_API_KEY` eklendiğinde otomatik dolacaktır.")
+            st.info("Etsy Winning Tags verisi `ETSY_API_KEY` eklendiğinde otomatik dolacaktır.")
 
 
 if __name__ == "__main__":
