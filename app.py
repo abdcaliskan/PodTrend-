@@ -74,8 +74,8 @@ def load_dashboard_data(force_live: bool = False) -> tuple[pd.DataFrame, pd.Data
 
     sc_csv = OUTPUT_DIR / "niche_scorecard.csv"
     wt_csv = OUTPUT_DIR / "winning_tags.csv"
-    if sc_csv.exists() and not force_live:
-        wt_df = pd.read_csv(wt_csv) if wt_csv.exists() else pd.DataFrame()
+    if sc_csv.exists() and sc_csv.stat().st_size > 0 and not force_live:
+        wt_df = pd.read_csv(wt_csv) if (wt_csv.exists() and wt_csv.stat().st_size > 0) else pd.DataFrame()
         return pd.read_csv(sc_csv), wt_df, "Canlı ETL Çıktısı (output/niche_scorecard.csv)"
 
     extracted = extract_all()
@@ -428,11 +428,13 @@ def main() -> None:
     st.subheader("🏷️ Reyna İçin Hazır Etiketler (Winning Tags)")
     niche_options = filtered["niche"].tolist() if not filtered.empty else latest_df["niche"].tolist()
     selected_niche = st.selectbox("Niş Seç", niche_options)
-    if selected_niche and not wt_df.empty:
+    if selected_niche and not wt_df.empty and "niche" in wt_df.columns:
         niche_tags = wt_df[wt_df["niche"] == selected_niche].sort_values("frequency", ascending=False)
         tags_list = niche_tags["tag"].astype(str).tolist()[:13]
         st.write("Etsy'ye doğrudan yapıştırmak için (sağ üstten kopyala):")
         st.code(", ".join(tags_list), language=None)
+    else:
+        st.info("Etsy Winning Tags verisi `ETSY_API_KEY` eklendiğinde otomatik dolacaktır.")
 
 
 if __name__ == "__main__":
