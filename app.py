@@ -226,18 +226,21 @@ def render_scorecard_visuals(df: pd.DataFrame) -> None:
 
     bars_html = ""
     rows_html = ""
-    for _, r in df.iterrows():
+    for _, r in df.head(20).iterrows():
         niche = escape(str(r["niche"]))
-        score = float(r["opportunity_score"])
-        comp = int(r["total_competition"])
-        price = float(r["avg_price_usd"])
-        trend = float(r["trend_slope_90d"])
-        fresh = int(r["fresh_winners_count"])
+        score = float(r.get("opportunity_score", 0))
+        seed = escape(str(r.get("seed_category", "-")))
+        t_type = escape(str(r.get("trend_type", "-")))
+        growth = r.get("growth_pct", "-")
+        comp_raw = r.get("total_competition", "Pending Etsy API")
+        price_raw = r.get("avg_price_usd", "Pending Etsy API")
+
+        comp_str = f"{int(comp_raw):,}" if isinstance(comp_raw, (int, float)) and pd.notna(comp_raw) and str(comp_raw).isdigit() else escape(str(comp_raw))
+        price_str = f"${float(price_raw):.2f}" if isinstance(price_raw, (int, float)) and pd.notna(price_raw) else escape(str(price_raw))
+        growth_str = f"+{int(growth)}%" if str(t_type) == "RISING" and str(growth).lstrip("-").isdigit() else str(growth)
 
         bar_color = "#22c55e" if score >= 70 else ("#f97316" if score >= 45 else "#ef4444")
         score_cls = "ok" if score >= 70 else ("mid" if score >= 45 else "missing")
-        trend_color = "#22c55e" if trend > 0 else ("#ef4444" if trend < 0 else "#94a3b8")
-        trend_str = f"{trend:+.2f}"
 
         bars_html += f"""
         <div class="bar-row">
@@ -253,16 +256,15 @@ def render_scorecard_visuals(df: pd.DataFrame) -> None:
 
         rows_html += f"""
         <tr>
-          <td><strong>{niche}</strong></td>
+          <td><strong>{niche}</strong><br/><span style="color:#64748b;font-size:11px;">{seed}</span></td>
           <td><span class="badge {score_cls}">{score:.1f}</span></td>
-          <td>{comp:,}</td>
-          <td>${price:.2f}</td>
-          <td style="color:{trend_color}; font-weight:700;">{trend_str}</td>
-          <td>{fresh}</td>
+          <td><span class="badge {'ok' if t_type=='RISING' else 'pending'}">{t_type} ({growth_str})</span></td>
+          <td style="color:#94a3b8;">{comp_str}</td>
+          <td style="color:#94a3b8;">{price_str}</td>
         </tr>
         """
 
-    height = max(310, 140 + len(df) * 52)
+    height = max(320, 140 + min(len(df), 20) * 54)
     html = f"""<!DOCTYPE html><html><head><style>
     {BASE_CSS}
     .grid {{
@@ -319,20 +321,19 @@ def render_scorecard_visuals(df: pd.DataFrame) -> None:
     </style></head><body>
       <div class="grid">
         <div class="card">
-          <div class="title">Fırsat Skoru Sıralaması (0–100)</div>
+          <div class="title">Canlı Keşfedilen Trendler — Fırsat Skoru (0–100)</div>
           {bars_html}
         </div>
         <div class="card">
-          <div class="title">Niche Scorecard Sonuç Tablosu</div>
+          <div class="title">Dinamik Trend & Rekabet Tablosu</div>
           <table>
             <thead>
               <tr>
-                <th>Niş</th>
+                <th>Keşfedilen Arama</th>
                 <th>Skor</th>
-                <th>Rekabet</th>
-                <th>Ort. Fiyat</th>
-                <th>90g Trend</th>
-                <th>Taze Kazanan</th>
+                <th>Google Trends</th>
+                <th>Etsy Rekabet</th>
+                <th>Etsy Fiyat</th>
               </tr>
             </thead>
             <tbody>{rows_html}</tbody>
@@ -396,9 +397,10 @@ def main() -> None:
     k1, k2, k3, k4 = st.columns(4)
     top_row = latest_df.sort_values("opportunity_score", ascending=False).iloc[0]
     k1.metric("Son Çalışma Tarihi", latest_date, "Sistem Güncel")
-    k2.metric("Taranan Niş", len(latest_df))
+    k2.metric("Keşfedilen Trend", len(latest_df))
     k3.metric("En Yüksek Skor", f"{top_row['opportunity_score']} / 100", str(top_row["niche"]))
-    k4.metric("Ortalama Fiyat", f"${latest_df['avg_price_usd'].mean():.2f}", "Hedef: $24+")
+    numeric_prices = pd.to_numeric(latest_df.get("avg_price_usd"), errors="coerce").dropna()
+    k4.metric("Ortalama Etsy Fiyatı", f"${numeric_prices.mean():.2f}" if not numeric_prices.empty else "Pending Etsy API", "Hedef: $24+")
 
     st.subheader("⚙️ Canlı ETL Akış Durumu (Extract → Transform → Load)")
     api_states = {

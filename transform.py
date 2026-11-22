@@ -1,9 +1,9 @@
 """
-Transform Layer
-===============
+Transform Layer (Dynamic Discovery + Optional Etsy Enrichment)
+==============================================================
 - Filters trademark risks using trademark_blacklist.txt
-- Calculates Opportunity Score (0-100) per niche
-- Explodes tags across top 50 listings to produce Winning_Tags
+- Ranks dynamically discovered Google Trends keywords (no fake numbers!)
+- Enriches with real Etsy competition/price/tags when ETSY_API_KEY is active
 """
 
 from datetime import datetime, timezone
@@ -29,91 +29,96 @@ def has_trademark(text: str, blacklist: list[str]) -> bool:
     return any(term in lowered for term in blacklist)
 
 
-def score_competition(total_count: int) -> float:
-    """1,000 - 15,000 band gets full 35 pts; 100,000+ gets heavy penalty."""
-    if 1_000 <= total_count <= 15_000:
-        return 35.0
-    if total_count < 1_000:
-        return 22.0  # very low volume niche
-    if total_count <= 50_000:
-        return 20.0
-    if total_count <= 100_000:
-        return 10.0
-    return 2.0
-
-
 def transform_data(
-    raw_listings: list[dict],
-    trend_slopes: dict[str, float],
+    extracted: dict,
     blacklist_path: Path,
     run_date: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     run_date = run_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     blacklist = load_blacklist(blacklist_path)
 
-    df = pd.DataFrame(raw_listings)
-    if df.empty:
-        return pd.DataFrame(), pd.DataFrame()
+    trend_keywords = extracted.get("trend_keywords", [])
+    etsy_listings = extracted.get("etsy_listings", [])
 
-    # Filter out listings with trademarked titles or tags
-    df["tags_joined"] = df["tags"].apply(lambda t: " ".join(t) if isinstance(t, list) else str(t))
-    mask_safe = ~df.apply(
-        lambda r: has_trademark(f"{r['title']} {r['tags_joined']}", blacklist), axis=1
-    )
-    df = df[mask_safe].copy()
-    if df.empty:
-        return pd.DataFrame(), pd.DataFrame()
+    # Build Etsy lookup if live Etsy data is present
+    etsy_by_kw: dict[str, dict] = {}
+    winning_tags_rows: list[dict] = []
 
-    now_ts = datetime.now(timezone.utc).timestamp()
-    df["age_days"] = ((now_ts - df["creation_timestamp"]) / 86400.0).clip(lower=1.0)
-    df["is_fresh_winner"] = (df["age_days"] < 90) & (df["num_favorers"] >= 30)
+    if etsy_listings:
+        edf = pd.DataFrame(etsy_listings)
+        edf["tags_joined"] = edf["tags"].apply(lambda t: " ".join(t) if isinstance(t, list) else str(t))
+        edf = edf[~edf.apply(lambda r: has_trademark(f"{r['title']} {r['tags_joined']}", blacklist), axis=1)]
 
-    # 1. Niche_Scorecard
+        now_ts = datetime.now(timezone.utc).timestamp()
+        edf["age_days"] = ((now_ts - edf["creation_timestamp"]) / 86400.0).clip(lower=1.0)
+        edf["is_fresh_winner"] = (edf["age_days"] < 90) & (edf["num_favorers"] >= 30)
+
+        for kw, grp in edf.groupby("keyword"):
+            etsy_by_kw[kw] = {
+                "total_competition": int(grp["total_competition"].max()),
+                "avg_price_usd": round(float(grp["price_usd"].mean()), 2),
+                "fresh_winners_count": int(grp["is_fresh_winner"].sum()),
+            }
+
+        tags_df = edf[["keyword", "tags"]].explode("tags").dropna(subset=["tags"])
+        tags_df["tag"] = tags_df["tags"].astype(str).str.strip().str.lower()
+        tags_df = tags_df[
+            (tags_df["tag"].str.len() > 0)
+            & (tags_df["tag"].str.len() <= ETSY_MAX_TAG_LEN)
+            & (~tags_df["tag"].apply(lambda t: has_trademark(t, blacklist)))
+        ]
+        wt = (
+            tags_df.groupby(["keyword", "tag"])
+            .size()
+            .reset_index(name="frequency")
+            .sort_values(["keyword", "frequency"], ascending=[True, False])
+            .groupby("keyword", as_index=False)
+            .head(13)
+        )
+        wt.rename(columns={"keyword": "niche"}, inplace=True)
+        wt.insert(0, "date", run_date)
+        winning_tags_rows = wt.to_dict(orient="records")
+
     scorecard_rows = []
-    for niche, group in df.groupby("niche"):
-        total_comp = int(group["total_competition"].max())
-        avg_price = round(float(group["price_usd"].mean()), 2)
-        fresh_winners = int(group["is_fresh_winner"].sum())
-        trend_slope = float(trend_slopes.get(niche, 0.0))
+    for item in trend_keywords:
+        kw = item["keyword"]
+        if has_trademark(kw, blacklist):
+            continue
 
-        comp_pts = score_competition(total_comp)  # max 35
-        velocity_pts = min(fresh_winners * 5.0, 30.0)  # max 30
-        margin_pts = 20.0 if avg_price >= 24.0 else max(0.0, (avg_price / 24.0) * 15.0)  # max 20
-        trend_pts = min(max(trend_slope, 0.0) * 1.0, 15.0)  # max 15
+        growth = int(item.get("growth_pct", 0))
+        t_type = item.get("trend_type", "RISING")
+        seed = item.get("seed_category", "")
 
-        opp_score = round(min(comp_pts + velocity_pts + margin_pts + trend_pts, 100.0), 1)
+        # Pure real-data score: Google Trends momentum + Etsy data (if available)
+        trend_pts = min(growth / 5.0, 60.0) if t_type == "RISING" else min(growth * 0.4, 40.0)
+        etsy_info = etsy_by_kw.get(kw)
+        if etsy_info:
+            comp = etsy_info["total_competition"]
+            price = etsy_info["avg_price_usd"]
+            fresh = etsy_info["fresh_winners_count"]
+            etsy_pts = (20.0 if 1000 <= comp <= 15000 else 8.0) + (10.0 if price >= 24 else 4.0) + min(fresh * 2.0, 10.0)
+            opp_score = round(min(trend_pts + etsy_pts, 100.0), 1)
+        else:
+            comp = None
+            price = None
+            fresh = None
+            opp_score = round(min(trend_pts * 1.5, 100.0), 1)
 
         scorecard_rows.append({
             "date": run_date,
-            "niche": niche,
-            "total_competition": total_comp,
-            "avg_price_usd": avg_price,
-            "trend_slope_90d": trend_slope,
-            "fresh_winners_count": fresh_winners,
+            "niche": kw,
+            "seed_category": seed,
+            "trend_type": t_type,
+            "growth_pct": growth,
+            "total_competition": comp if comp is not None else "Pending Etsy API",
+            "avg_price_usd": price if price is not None else "Pending Etsy API",
+            "fresh_winners_count": fresh if fresh is not None else "Pending Etsy API",
             "opportunity_score": opp_score,
         })
 
-    scorecard_df = pd.DataFrame(scorecard_rows).sort_values(
-        by="opportunity_score", ascending=False
-    )
+    scorecard_df = pd.DataFrame(scorecard_rows)
+    if not scorecard_df.empty:
+        scorecard_df = scorecard_df.sort_values(by=["opportunity_score", "growth_pct"], ascending=False)
 
-    # 2. Winning_Tags (explode tags, filter <= 20 chars & blacklist, count frequency)
-    tags_df = df[["niche", "tags"]].explode("tags").dropna(subset=["tags"])
-    tags_df["tag"] = tags_df["tags"].astype(str).str.strip().str.lower()
-    tags_df = tags_df[
-        (tags_df["tag"].str.len() > 0)
-        & (tags_df["tag"].str.len() <= ETSY_MAX_TAG_LEN)
-        & (~tags_df["tag"].apply(lambda t: has_trademark(t, blacklist)))
-    ]
-
-    winning_tags_df = (
-        tags_df.groupby(["niche", "tag"])
-        .size()
-        .reset_index(name="frequency")
-        .sort_values(by=["niche", "frequency"], ascending=[True, False])
-    )
-    winning_tags_df.insert(0, "date", run_date)
-    # Keep top 13 tags per niche
-    winning_tags_df = winning_tags_df.groupby("niche", as_index=False).head(13)
-
+    winning_tags_df = pd.DataFrame(winning_tags_rows)
     return scorecard_df, winning_tags_df
