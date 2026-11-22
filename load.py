@@ -31,6 +31,8 @@ def _get_gspread_client():
     else:
         creds_path = Path(creds_raw)
         if not creds_path.exists():
+            creds_path = Path(__file__).resolve().parent / creds_raw
+        if not creds_path.exists():
             return None
         creds = Credentials.from_service_account_file(str(creds_path), scopes=scopes)
 
