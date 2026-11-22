@@ -1,13 +1,17 @@
 """
 POD & Etsy Live Team Dashboard (Streamlit)
 =========================================
-Includes animated ETL flow diagram, API readiness tracker (pending vs active),
-opportunity charts, and one-click Winning Tags copy for the team.
+Unified dark-slate design language across:
+- Animated ETL flow diagram
+- API readiness tracker (pending vs active)
+- Custom horizontal opportunity bar chart & styled scorecard table
+- One-click Winning Tags copy for Reyna & Etsy
 """
 
 import json
 import os
 from datetime import datetime, timezone
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -84,110 +88,113 @@ def load_dashboard_data() -> tuple[pd.DataFrame, pd.DataFrame, str]:
         {"date": today, "niche": "2027 vision board poster", "tag": "2027 vision board", "frequency": 10},
         {"date": today, "niche": "2027 vision board poster", "tag": "vision board poster", "frequency": 10},
     ])
-    return sample_sc, sample_wt, "Örnek / Son Çıktı Verisi"
+    return sample_sc, sample_wt, "Son Çıktı / Örnek Veri"
+
+
+BASE_CSS = """
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+  background: transparent;
+  color: #f1f5f9;
+}
+.card {
+  background: #131c31;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  padding: 16px 20px;
+}
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.badge.ok { background: rgba(34,197,94,0.16); color: #22c55e; }
+.badge.pending { background: rgba(234,179,8,0.16); color: #eab308; }
+.badge.missing { background: rgba(239,68,68,0.16); color: #ef4444; }
+.badge.mid { background: rgba(249,115,22,0.16); color: #f97316; }
+"""
 
 
 def render_animated_etl_flow(api_states: dict[str, tuple[str, str]]) -> None:
-    """Renders an animated glowing ETL flow diagram inside Streamlit."""
-    def badge_html(label: str, state: str) -> str:
-        colors = {
-            "OK": ("rgba(34,197,94,0.16)", "#22c55e"),
-            "PENDING": ("rgba(234,179,8,0.16)", "#eab308"),
-            "MISSING": ("rgba(239,68,68,0.16)", "#ef4444"),
-        }
-        bg, fg = colors.get(state, ("rgba(148,163,184,0.16)", "#94a3b8"))
-        return f'<span style="background:{bg};color:{fg};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;">{label}</span>'
+    def badge(label: str, state: str) -> str:
+        cls = {"OK": "ok", "PENDING": "pending", "MISSING": "missing"}.get(state, "pending")
+        return f'<span class="badge {cls}">{escape(label)}</span>'
 
     extract_items = "".join(
-        f'<div class="item"><span>{name}</span>{badge_html(lbl, st_code)}</div>'
+        f'<div class="item"><span>{escape(name)}</span>{badge(lbl, st_code)}</div>'
         for name, (lbl, st_code) in api_states.items()
     )
 
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body {{
-          margin: 0;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-          background: transparent;
-          color: #f1f5f9;
-        }}
-        .flow {{
-          display: grid;
-          grid-template-columns: 1.25fr 70px 1fr 70px 1fr;
-          align-items: center;
-          gap: 8px;
-          background: #131c31;
-          border: 1px solid rgba(148, 163, 184, 0.22);
-          border-radius: 14px;
-          padding: 16px 18px;
-        }}
-        .box {{
-          background: #1b2742;
-          border: 1px solid rgba(148, 163, 184, 0.2);
-          border-radius: 12px;
-          padding: 12px 14px;
-        }}
-        .head {{
-          font-size: 11.5px;
-          font-weight: 800;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: #f97316;
-          margin-bottom: 8px;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }}
-        .dot {{
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: #22c55e;
-          animation: pulse 1.6s infinite;
-        }}
-        @keyframes pulse {{
-          0%, 100% {{ opacity: 1; transform: scale(1); }}
-          50% {{ opacity: 0.4; transform: scale(1.3); }}
-        }}
-        .item {{
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          font-size: 12.5px;
-          background: rgba(15, 23, 42, 0.6);
-          padding: 6px 9px;
-          border-radius: 7px;
-          margin-bottom: 6px;
-        }}
-        .item:last-child {{ margin-bottom: 0; }}
-        .pipe {{
-          position: relative;
-          height: 4px;
-          background: rgba(56, 189, 248, 0.2);
-          border-radius: 4px;
-          overflow: hidden;
-        }}
-        .pipe::after {{
-          content: "";
-          position: absolute;
-          top: 0;
-          left: -40%;
-          width: 40%;
-          height: 100%;
-          background: linear-gradient(90deg, transparent, #38bdf8, #f97316, transparent);
-          animation: flow 1.4s linear infinite;
-        }}
-        @keyframes flow {{
-          0% {{ left: -40%; }}
-          100% {{ left: 100%; }}
-        }}
-      </style>
-    </head>
-    <body>
-      <div class="flow">
+    html = f"""<!DOCTYPE html><html><head><style>
+    {BASE_CSS}
+    .flow {{
+      display: grid;
+      grid-template-columns: 1.25fr 70px 1fr 70px 1fr;
+      align-items: center;
+      gap: 8px;
+    }}
+    .box {{
+      background: #1b2742;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }}
+    .head {{
+      font-size: 11.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #f97316;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .dot {{
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 1.6s infinite;
+    }}
+    @keyframes pulse {{
+      0%, 100% {{ opacity: 1; transform: scale(1); }}
+      50% {{ opacity: 0.4; transform: scale(1.3); }}
+    }}
+    .item {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 6px 9px;
+      border-radius: 7px;
+      margin-bottom: 6px;
+    }}
+    .item:last-child {{ margin-bottom: 0; }}
+    .pipe {{
+      position: relative;
+      height: 4px;
+      background: rgba(56, 189, 248, 0.2);
+      border-radius: 4px;
+      overflow: hidden;
+    }}
+    .pipe::after {{
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -40%;
+      width: 40%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, #38bdf8, #f97316, transparent);
+      animation: flow 1.4s linear infinite;
+    }}
+    @keyframes flow {{ 0% {{ left: -40%; }} 100% {{ left: 100%; }} }}
+    </style></head><body>
+      <div class="card flow">
         <div class="box">
           <div class="head"><span class="dot"></span> 1. Extract (API Kaynakları)</div>
           {extract_items}
@@ -195,22 +202,176 @@ def render_animated_etl_flow(api_states: dict[str, tuple[str, str]]) -> None:
         <div class="pipe"></div>
         <div class="box">
           <div class="head"><span class="dot"></span> 2. Transform (Motor)</div>
-          <div class="item"><span>Telif / Blacklist Filtresi</span>{badge_html("AKTİF", "OK")}</div>
-          <div class="item"><span>Opportunity Score (0-100)</span>{badge_html("AKTİF", "OK")}</div>
-          <div class="item"><span>Top 13 Etsy Tag Madenciliği</span>{badge_html("AKTİF", "OK")}</div>
+          <div class="item"><span>Telif / Blacklist Filtresi</span>{badge("AKTİF", "OK")}</div>
+          <div class="item"><span>Opportunity Score (0-100)</span>{badge("AKTİF", "OK")}</div>
+          <div class="item"><span>Top 13 Etsy Tag Madenciliği</span>{badge("AKTİF", "OK")}</div>
         </div>
         <div class="pipe"></div>
         <div class="box">
           <div class="head"><span class="dot"></span> 3. Load (Çıktılar)</div>
-          <div class="item"><span>CSV & Dashboard JSON</span>{badge_html("GÜNCEL", "OK")}</div>
-          <div class="item"><span>Google Sheets Sync</span>{badge_html("BEKLEMEDE" if not get_secret("GOOGLE_SHEET_ID") else "AKTİF", "PENDING" if not get_secret("GOOGLE_SHEET_ID") else "OK")}</div>
-          <div class="item"><span>GitHub Cron (TSİ 04:00)</span>{badge_html("HAZIR", "OK")}</div>
+          <div class="item"><span>CSV & Dashboard Veri</span>{badge("GÜNCEL", "OK")}</div>
+          <div class="item"><span>Google Sheets Sync</span>{badge("BEKLEMEDE" if not get_secret("GOOGLE_SHEET_ID") else "AKTİF", "PENDING" if not get_secret("GOOGLE_SHEET_ID") else "OK")}</div>
+          <div class="item"><span>GitHub Cron (TSİ 04:00)</span>{badge("HAZIR", "OK")}</div>
         </div>
       </div>
-    </body>
-    </html>
-    """
+    </body></html>"""
     components.html(html, height=275)
+
+
+def render_scorecard_visuals(df: pd.DataFrame) -> None:
+    """Renders matching dark-slate horizontal bar chart and styled scorecard table."""
+    if df.empty:
+        st.info("Filtreye uygun niş bulunamadı.")
+        return
+
+    bars_html = ""
+    rows_html = ""
+    for _, r in df.iterrows():
+        niche = escape(str(r["niche"]))
+        score = float(r["opportunity_score"])
+        comp = int(r["total_competition"])
+        price = float(r["avg_price_usd"])
+        trend = float(r["trend_slope_90d"])
+        fresh = int(r["fresh_winners_count"])
+
+        bar_color = "#22c55e" if score >= 70 else ("#f97316" if score >= 45 else "#ef4444")
+        score_cls = "ok" if score >= 70 else ("mid" if score >= 45 else "missing")
+        trend_color = "#22c55e" if trend > 0 else ("#ef4444" if trend < 0 else "#94a3b8")
+        trend_str = f"{trend:+.2f}"
+
+        bars_html += f"""
+        <div class="bar-row">
+          <div class="bar-meta">
+            <span class="bar-name">{niche}</span>
+            <strong style="color:{bar_color};">{score:.1f} / 100</strong>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width:{min(100, max(0, score))}%; background:{bar_color};"></div>
+          </div>
+        </div>
+        """
+
+        rows_html += f"""
+        <tr>
+          <td><strong>{niche}</strong></td>
+          <td><span class="badge {score_cls}">{score:.1f}</span></td>
+          <td>{comp:,}</td>
+          <td>${price:.2f}</td>
+          <td style="color:{trend_color}; font-weight:700;">{trend_str}</td>
+          <td>{fresh}</td>
+        </tr>
+        """
+
+    height = max(310, 140 + len(df) * 52)
+    html = f"""<!DOCTYPE html><html><head><style>
+    {BASE_CSS}
+    .grid {{
+      display: grid;
+      grid-template-columns: 1fr 1.35fr;
+      gap: 16px;
+    }}
+    .title {{
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      color: #f8fafc;
+    }}
+    .bar-row {{ margin-bottom: 13px; }}
+    .bar-row:last-child {{ margin-bottom: 0; }}
+    .bar-meta {{
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 5px;
+    }}
+    .bar-name {{ color: #e2e8f0; font-weight: 600; }}
+    .bar-track {{
+      height: 11px;
+      background: #1b2742;
+      border-radius: 999px;
+      overflow: hidden;
+    }}
+    .bar-fill {{
+      height: 100%;
+      border-radius: 999px;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+    }}
+    th, td {{
+      text-align: left;
+      padding: 10px 10px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+    }}
+    th {{
+      color: #94a3b8;
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    tr:last-child td {{ border-bottom: none; }}
+    @media (max-width: 850px) {{
+      .grid {{ grid-template-columns: 1fr; }}
+    }}
+    </style></head><body>
+      <div class="grid">
+        <div class="card">
+          <div class="title">Fırsat Skoru Sıralaması (0–100)</div>
+          {bars_html}
+        </div>
+        <div class="card">
+          <div class="title">Niche Scorecard Sonuç Tablosu</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Niş</th>
+                <th>Skor</th>
+                <th>Rekabet</th>
+                <th>Ort. Fiyat</th>
+                <th>90g Trend</th>
+                <th>Taze Kazanan</th>
+              </tr>
+            </thead>
+            <tbody>{rows_html}</tbody>
+          </table>
+        </div>
+      </div>
+    </body></html>"""
+    components.html(html, height=height)
+
+
+def render_api_status_table() -> None:
+    """Renders dark-slate API readiness table matching the ETL design language."""
+    apis = [
+        ("Gelato Satıcı API", "HAZIR" if get_secret("GELATO_API_KEY") else "EKSİK", "ok" if get_secret("GELATO_API_KEY") else "missing", "Ürün maliyeti & katalog çekimi"),
+        ("Google Trends (pytrends)", "CANLI", "ok", "90 günlük arama ivmesi (API key gerekmez)"),
+        ("Pinterest Trends API v5", "AKTİF" if get_secret("PINTEREST_ACCESS_TOKEN") else "ONAY BEKLİYOR", "ok" if get_secret("PINTEREST_ACCESS_TOKEN") else "pending", "Trial access başvurusu gönderildi; onay bekleniyor"),
+        ("Etsy Open API v3", "AKTİF" if get_secret("ETSY_API_KEY") else "MAĞAZA BEKLİYOR", "ok" if get_secret("ETSY_API_KEY") else "missing", "TR'den Etsy mağazası açılınca Seller App ile alınacak"),
+        ("Google Sheets Sync", "AKTİF" if get_secret("GOOGLE_SHEET_ID") else "KURULUM BEKLİYOR", "ok" if get_secret("GOOGLE_SHEET_ID") else "pending", "Ortak Google Sheet bağlantısı için Service Account gerekir"),
+        ("eBay Browse & Reddit", "OPSİYONEL", "pending", "Çapraz fiyat ve niş fikir madenciliği için ek kaynak"),
+    ]
+    rows = "".join(
+        f'<tr><td><strong>{escape(a)}</strong></td><td><span class="badge {cls}">{escape(st_txt)}</span></td><td style="color:#94a3b8;">{escape(note)}</td></tr>'
+        for a, st_txt, cls, note in apis
+    )
+    html = f"""<!DOCTYPE html><html><head><style>
+    {BASE_CSS}
+    table {{ width: 100%; border-collapse: collapse; }}
+    th, td {{ text-align: left; padding: 9px 10px; font-size: 13px; border-bottom: 1px solid rgba(148,163,184,0.16); }}
+    th {{ color: #94a3b8; font-size: 11.5px; text-transform: uppercase; }}
+    tr:last-child td {{ border-bottom: none; }}
+    </style></head><body>
+      <div class="card">
+        <table>
+          <thead><tr><th>API Kaynağı</th><th>Durum</th><th>Açıklama</th></tr></thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
+    </body></html>"""
+    components.html(html, height=285)
 
 
 def main() -> None:
@@ -239,32 +400,20 @@ def main() -> None:
     k3.metric("En Yüksek Skor", f"{top_row['opportunity_score']} / 100", str(top_row["niche"]))
     k4.metric("Ortalama Fiyat", f"${latest_df['avg_price_usd'].mean():.2f}", "Hedef: $24+")
 
-    # Animated ETL Flow
     st.subheader("⚙️ Canlı ETL Akış Durumu (Extract → Transform → Load)")
     api_states = {
         "Gelato Catalog API": ("AKTİF" if get_secret("GELATO_API_KEY") else "EKSİK", "OK" if get_secret("GELATO_API_KEY") else "MISSING"),
         "Google Trends (90g)": ("AKTİF (Keysiz)", "OK"),
         "Pinterest Trends v5": ("AKTİF" if get_secret("PINTEREST_ACCESS_TOKEN") else "ONAY BEKLİYOR", "OK" if get_secret("PINTEREST_ACCESS_TOKEN") else "PENDING"),
         "Etsy Open API v3": ("AKTİF" if get_secret("ETSY_API_KEY") else "MAĞAZA BEKLİYOR", "OK" if get_secret("ETSY_API_KEY") else "MISSING"),
-        "eBay & Reddit API": ("AKTİF" if get_secret("EBAY_ACCESS_TOKEN") else "EKSİK / OPSİYONEL", "OK" if get_secret("EBAY_ACCESS_TOKEN") else "PENDING"),
+        "eBay & Reddit API": ("AKTİF" if get_secret("EBAY_ACCESS_TOKEN") else "OPSİYONEL", "OK" if get_secret("EBAY_ACCESS_TOKEN") else "PENDING"),
     }
     render_animated_etl_flow(api_states)
 
-    # Explicit Missing / Pending APIs Callout
-    with st.expander("🔑 Eksik veya Onay Sürecindeki API'ler (Takım Durumu)", expanded=True):
-        missing_rows = [
-            {"API Kaynağı": "Gelato Satıcı API", "Durum": "✅ Hazır (Key alındı)" if get_secret("GELATO_API_KEY") else "⚠️ Secret eklenmedi", "Not": "Ürün maliyeti & katalog çekimi"},
-            {"API Kaynağı": "Google Trends (pytrends)", "Durum": "✅ Canlı Çalışıyor", "Not": "90 günlük arama ivmesi (API key gerekmez)"},
-            {"API Kaynağı": "Pinterest Trends API v5", "Durum": "✅ Aktif" if get_secret("PINTEREST_ACCESS_TOKEN") else "⏳ Onay Bekliyor (Trial Pending)", "Not": "Başvuru gönderildi; onaylanınca otomatik token bağlanacak"},
-            {"API Kaynağı": "Etsy Open API v3", "Durum": "✅ Aktif" if get_secret("ETSY_API_KEY") else "❌ Eksik (Mağaza Açılışı Bekliyor)", "Not": "TR'den Etsy mağazası açılınca 'Seller App' ile dakikalar içinde alınacak"},
-            {"API Kaynağı": "Google Sheets Sync", "Durum": "✅ Aktif" if get_secret("GOOGLE_SHEET_ID") else "⏳ Kurulum Bekliyor", "Not": "Canlı tabloyu ortak Google Sheet'e basmak için Service Account gerekir"},
-            {"API Kaynağı": "eBay Browse & Reddit OAuth", "Durum": "⏸️ Opsiyonel / Başvuru Gerekli", "Not": "Çapraz fiyat ve niş fikir madenciliği için ek kaynak"},
-        ]
-        st.dataframe(pd.DataFrame(missing_rows), use_container_width=True, hide_index=True)
+    with st.expander("🔑 Eksik veya Onay Sürecindeki API'ler (Takım Durumu)", expanded=False):
+        render_api_status_table()
 
-    st.divider()
-
-    st.subheader("📈 Niş Skorları & Reyna İçin Hazır Etiketler")
+    st.subheader("📈 Niş Skorları & Sonuç Tablosu")
     c_filter1, c_filter2 = st.columns([2, 1])
     with c_filter1:
         search_q = st.text_input("Niş Ara", placeholder="Örn: planner, vision, tennis...")
@@ -276,24 +425,16 @@ def main() -> None:
         & (latest_df["niche"].astype(str).str.lower().str.contains(search_q.lower().strip()))
     ].sort_values("opportunity_score", ascending=False)
 
-    left_col, right_col = st.columns([1.2, 1])
-    with left_col:
-        st.markdown("**Fırsat Skoru Karşılaştırması**")
-        if not filtered.empty:
-            chart_df = filtered.set_index("niche")[["opportunity_score"]]
-            st.bar_chart(chart_df)
-        st.dataframe(filtered, use_container_width=True, hide_index=True)
+    render_scorecard_visuals(filtered)
 
-    with right_col:
-        st.markdown("**🏷️ Seçili Niş İçin En İyi Etiketler (Winning Tags)**")
-        niche_options = filtered["niche"].tolist() if not filtered.empty else latest_df["niche"].tolist()
-        selected_niche = st.selectbox("Niş Seç", niche_options)
-        if selected_niche and not wt_df.empty:
-            niche_tags = wt_df[wt_df["niche"] == selected_niche].sort_values("frequency", ascending=False)
-            tags_list = niche_tags["tag"].astype(str).tolist()[:13]
-            st.write("Etsy'ye doğrudan yapıştırmak için (sağ üstten kopyala):")
-            st.code(", ".join(tags_list), language=None)
-            st.dataframe(niche_tags[["tag", "frequency"]].head(13), use_container_width=True, hide_index=True)
+    st.subheader("🏷️ Reyna İçin Hazır Etiketler (Winning Tags)")
+    niche_options = filtered["niche"].tolist() if not filtered.empty else latest_df["niche"].tolist()
+    selected_niche = st.selectbox("Niş Seç", niche_options)
+    if selected_niche and not wt_df.empty:
+        niche_tags = wt_df[wt_df["niche"] == selected_niche].sort_values("frequency", ascending=False)
+        tags_list = niche_tags["tag"].astype(str).tolist()[:13]
+        st.write("Etsy'ye doğrudan yapıştırmak için (sağ üstten kopyala):")
+        st.code(", ".join(tags_list), language=None)
 
 
 if __name__ == "__main__":
