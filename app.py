@@ -375,6 +375,101 @@ def render_api_status_table() -> None:
     components.html(html, height=285)
 
 
+@st.cache_data(ttl=3600)
+def fetch_yearly_seasonality(keywords: tuple[str, ...]) -> tuple[pd.DataFrame, str | None]:
+    """Fetches 12-month (52-week) Google Trends interest for up to 4 keywords."""
+    if not keywords:
+        return pd.DataFrame(), None
+    try:
+        from pytrends.request import TrendReq
+
+        kw_list = list(keywords[:4])
+        pytrends = TrendReq(hl="en-US", tz=0, timeout=(10, 25))
+        pytrends.build_payload(kw_list, cat=0, timeframe="today 12-m", geo="US")
+        df = pytrends.interest_over_time()
+        if df.empty:
+            return pd.DataFrame(), "Google Trends bu kelimeler için 12 aylık veri döndürmedi."
+        if "isPartial" in df.columns:
+            df = df.drop(columns=["isPartial"])
+        return df, None
+    except Exception as exc:
+        return pd.DataFrame(), f"Google Trends 12 aylık veri çekilemedi (rate-limit olabilir): {exc}"
+
+
+def render_seasonality_chart(df: pd.DataFrame) -> None:
+    """Renders a sleek dark-slate multi-line SVG chart for 12-month seasonality."""
+    if df.empty:
+        return
+
+    colors = ["#22c55e", "#f97316", "#38bdf8", "#eab308"]
+    cols = list(df.columns)[:4]
+    dates = [d.strftime("%b %y") if hasattr(d, "strftime") else str(d) for d in df.index]
+    n = len(dates)
+    if n < 2:
+        return
+
+    width, height = 960, 280
+    pad_l, pad_r, pad_t, pad_b = 42, 20, 20, 36
+    plot_w = width - pad_l - pad_r
+    plot_h = height - pad_t - pad_b
+
+    grid_svg = ""
+    for val in (0, 25, 50, 75, 100):
+        y = pad_t + plot_h - (val / 100.0) * plot_h
+        grid_svg += f'<line x1="{pad_l}" y1="{y:.1f}" x2="{width - pad_r}" y2="{y:.1f}" stroke="rgba(148,163,184,0.14)" stroke-dasharray="4 4"/>'
+        grid_svg += f'<text x="{pad_l - 8}" y="{y + 4:.1f}" fill="#64748b" font-size="11" text-anchor="end">{val}</text>'
+
+    # X-axis month labels (every ~4 weeks)
+    step = max(1, n // 10)
+    x_labels_svg = ""
+    for i in range(0, n, step):
+        x = pad_l + (i / (n - 1)) * plot_w
+        x_labels_svg += f'<text x="{x:.1f}" y="{height - 10}" fill="#94a3b8" font-size="11" text-anchor="middle">{escape(dates[i])}</text>'
+
+    paths_svg = ""
+    legend_html = ""
+    peaks_html = ""
+
+    for idx, col in enumerate(cols):
+        c = colors[idx % len(colors)]
+        vals = df[col].astype(float).tolist()
+        pts = []
+        for i, v in enumerate(vals):
+            x = pad_l + (i / (n - 1)) * plot_w
+            y = pad_t + plot_h - (min(100.0, max(0.0, v)) / 100.0) * plot_h
+            pts.append(f"{x:.1f},{y:.1f}")
+        paths_svg += f'<polyline fill="none" stroke="{c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" points="{" ".join(pts)}"/>'
+
+        max_val = max(vals)
+        peak_idx = vals.index(max_val)
+        peak_date = dates[peak_idx]
+        avg_val = sum(vals) / len(vals)
+        legend_html += f'<span style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;font-size:12.5px;"><span style="width:10px;height:10px;border-radius:50%;background:{c};"></span><strong>{escape(col)}</strong></span>'
+        peaks_html += f'<div class="peak-pill"><span style="color:{c};font-weight:700;">{escape(col)}</span><span>Zirve: <strong>{escape(peak_date)}</strong> (Skor {int(max_val)} | Ort {avg_val:.0f})</span></div>'
+
+    html = f"""<!DOCTYPE html><html><head><style>
+    {BASE_CSS}
+    .legend {{ display:flex; flex-wrap:wrap; margin-bottom:10px; }}
+    .peaks {{ display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-top:12px; }}
+    .peak-pill {{
+      background:#1b2742; border:1px solid rgba(148,163,184,0.18); border-radius:9px;
+      padding:8px 12px; font-size:12px; display:flex; flex-direction:column; gap:3px;
+    }}
+    svg {{ width:100%; height:auto; display:block; }}
+    </style></head><body>
+      <div class="card">
+        <div class="legend">{legend_html}</div>
+        <svg viewBox="0 0 {width} {height}">
+          {grid_svg}
+          {x_labels_svg}
+          {paths_svg}
+        </svg>
+        <div class="peaks">{peaks_html}</div>
+      </div>
+    </body></html>"""
+    components.html(html, height=400)
+
+
 def main() -> None:
     if "force_live" not in st.session_state:
         st.session_state.force_live = False
@@ -432,6 +527,23 @@ def main() -> None:
     ].sort_values("opportunity_score", ascending=False)
 
     render_scorecard_visuals(filtered)
+
+    st.subheader("📅 12 Aylık Mevsimsellik (Seasonality) Analizi")
+    st.caption("Seçtiğin nişlerin son 12 ayda (52 hafta) hangi aylarda zirve yaptığını canlı Google Trends üzerinden karşılaştır.")
+    all_niches = latest_df["niche"].astype(str).tolist()
+    default_picks = all_niches[:3] if len(all_niches) >= 3 else all_niches
+    selected_season_niches = st.multiselect(
+        "Karşılaştırılacak Nişler (En fazla 4 adet)",
+        options=all_niches,
+        default=default_picks,
+        max_selections=4,
+    )
+    if selected_season_niches:
+        season_df, season_err = fetch_yearly_seasonality(tuple(selected_season_niches))
+        if season_err:
+            st.warning(season_err)
+        else:
+            render_seasonality_chart(season_df)
 
     st.subheader("🏷️ Reyna İçin Hazır Etiketler (Winning Tags)")
     niche_options = filtered["niche"].tolist() if not filtered.empty else latest_df["niche"].tolist()
