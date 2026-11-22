@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POD ETL — Canlı Veri & Pipeline Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --surface: #131c31;
+      --surface-2: #1b2742;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --accent: #f97316;
+      --green: #22c55e;
+      --blue: #38bdf8;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --border: rgba(148, 163, 184, 0.18);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px 26px 40px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1360px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Top Bar */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 22px;
+    }
+
+    .topbar h1 {
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .topbar p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    .status-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+    }
+
+    .pill.fresh {
+      background: rgba(34, 197, 94, 0.14);
+      border-color: rgba(34, 197, 94, 0.4);
+      color: var(--green);
+    }
+
+    .pill.stale {
+      background: rgba(234, 179, 8, 0.14);
+      border-color: rgba(234, 179, 8, 0.4);
+      color: var(--yellow);
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(1.25); }
+    }
+
+    /* KPI Row */
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+    }
+
+    .kpi-label {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .kpi-val {
+      font-size: 26px;
+      font-weight: 800;
+    }
+
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--blue);
+      margin-top: 4px;
+    }
+
+    /* Animated ETL Flow */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 22px;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .etl-flow {
+      display: grid;
+      grid-template-columns: 1.2fr 80px 1fr 80px 1fr;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stage-box {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+
+    .stage-head {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+
+    .source-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .source-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+      background: rgba(15, 23, 42, 0.55);
+      padding: 6px 10px;
+      border-radius: 7px;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .badge.OK { background: rgba(34, 197, 94, 0.16); color: var(--green); }
+    .badge.MOCK { background: rgba(56, 189, 248, 0.16); color: var(--blue); }
+    .badge.SKIPPED { background: rgba(148, 163, 184, 0.16); color: var(--muted); }
+    .badge.ERROR { background: rgba(239, 68, 68, 0.18); color: var(--red); }
+
+    /* Animated Connector */
+    .pipe {
+      position: relative;
+      height: 4px;
+      background: rgba(56, 189, 248, 0.2);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .pipe::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -35%;
+      width: 35%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, var(--blue), var(--accent), transparent);
+      animation: flowPacket 1.6s linear infinite;
+    }
+
+    @keyframes flowPacket {
+      0% { left: -35%; }
+      100% { left: 100%; }
+    }
+
+    /* Charts & Table Grid */
+    .mid-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr;
+      gap: 16px;
+    }
+
+    .bar-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .bar-row {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .bar-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+
+    .bar-track {
+      height: 10px;
+      background: var(--surface-2);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.6s ease;
+    }
+
+    /* Table */
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    input[type="text"] {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 11px 12px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    tbody tr {
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    tbody tr:hover {
+      background: rgba(56, 189, 248, 0.08);
+    }
+
+    tbody tr.selected {
+      background: rgba(249, 115, 22, 0.14);
+    }
+
+    /* Tags Box */
+    .tags-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .tag-chip {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      color: var(--text);
+    }
+
+    .tag-chip span {
+      color: var(--accent);
+      font-weight: 700;
+      margin-left: 4px;
+    }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover { opacity: 0.9; }
+
+    @media (max-width: 980px) {
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .etl-flow { grid-template-columns: 1fr; }
+      .pipe { height: 24px; width: 4px; margin: 0 auto; }
+      .mid-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div>
+        <h1>POD & Etsy Veri Hattı (ETL) Dashboard</h1>
+        <p>Sistem sağlığı, otomatik akış durumu ve günlük fırsat skorları</p>
+      </div>
+      <div class="status-group">
+        <div id="freshnessPill" class="pill fresh">
+          <span class="dot"></span>
+          <span id="freshnessText">Sistem Güncel</span>
+        </div>
+        <div class="pill">
+          Son Çalışma: <strong id="lastRunAt">-</strong>
+        </div>
+      </div>
+    </header>
+
+    <!-- KPI CARDS -->
+    <section class="kpis">
+      <div class="kpi-card">
+        <div class="kpi-label">Taranan Niş Sayısı</div>
+        <div class="kpi-val" id="kpiNiches">0</div>
+        <div class="kpi-sub">Aktif takip listesi</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">En Yüksek Fırsat Skoru</div>
+        <div class="kpi-val" id="kpiTopScore">0</div>
+        <div class="kpi-sub" id="kpiTopNiche">-</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Ortalama Satış Fiyatı</div>
+        <div class="kpi-val" id="kpiAvgPrice">$0</div>
+        <div class="kpi-sub">Hedef: $24+</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">90 Günlük Taze Kazananlar</div>
+        <div class="kpi-val" id="kpiFresh">0</div>
+        <div class="kpi-sub">Yeni mağaza sinyali</div>
+      </div>
+    </section>
+
+    <!-- ANIMATED ETL FLOW -->
+    <section class="panel">
+      <div class="panel-title">
+        <span>Canlı ETL Akış Durumu (Extract → Transform → Load)</span>
+        <span style="font-size:12px; color:var(--muted)" id="modeLabel">Mod: -</span>
+      </div>
+      <div class="etl-flow">
+        <div class="stage-box">
+          <div class="stage-head">1. Extract (Veri Kaynakları)</div>
+          <div class="source-list" id="sourceList"></div>
+        </div>
+        <div class="pipe" title="Veri akıyor..."></div>
+        <div class="stage-box">
+          <div class="stage-head">2. Transform (Skor & Filtre)</div>
+          <div class="source-list">
+            <div class="source-item"><span>Telif / Blacklist Filtresi</span><span class="badge OK">AKTİF</span></div>
+            <div class="source-item"><span>Opportunity Score (0-100)</span><span class="badge OK">AKTİF</span></div>
+            <div class="source-item"><span>Top 13 Etsy Tag Madenciliği</span><span class="badge OK">AKTİF</span></div>
+          </div>
+        </div>
+        <div class="pipe" title="Çıktılar yükleniyor..."></div>
+        <div class="stage-box">
+          <div class="stage-head">3. Load (Çıktı & Depo)</div>
+          <div class="source-list">
+            <div class="source-item"><span>Yerel CSV Yedekleri</span><span class="badge OK">GÜNCEL</span></div>
+            <div class="source-item"><span>Dashboard Veri Dosyası</span><span class="badge OK">GÜNCEL</span></div>
+            <div class="source-item"><span>Google Sheets Sync</span><span class="badge MOCK">HAZIR</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHARTS + WINNING TAGS -->
+    <section class="mid-grid">
+      <div class="panel">
+        <div class="panel-title"><span>Fırsat Skoru Sıralaması (0–100)</span></div>
+        <div class="bar-list" id="scoreChart"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">
+          <span id="tagsTitle">Seçili Niş İçin En İyi Etiketler (Winning Tags)</span>
+          <button onclick="copyTags()">Etiketleri Kopyala</button>
+        </div>
+        <p style="font-size:12.5px; color:var(--muted)">Tablodan herhangi bir nişe tıkla, Reyna & Etsy için hazır etiketleri gör:</p>
+        <div class="tags-wrap" id="tagsContainer"></div>
+      </div>
+    </section>
+
+    <!-- SCORECARD TABLE -->
+    <section class="panel">
+      <div class="panel-title">
+        <span>Niche Scorecard Tablosu</span>
+        <div class="controls">
+          <input type="text" id="searchInput" placeholder="Niş ara..." oninput="renderTable()" />
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Niş</th>
+            <th>Fırsat Skoru</th>
+            <th>Rekabet (İlan)</th>
+            <th>Ort. Fiyat ($)</th>
+            <th>90g Trend İvmesi</th>
+            <th>Taze Kazanan</th>
+          </tr>
+        </thead>
+        <tbody id="scoreTableBody"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- Pipeline tarafından otomatik üretilen veri -->
+  <script src="output/dashboard_data.js"></script>
+  <script>
+    const FALLBACK_DATA = {
+      last_run_at: new Date().toISOString(),
+      meta: {
+        status: "OK",
+        mode: "SAMPLE",
+        sources: { etsy: "MOCK", gelato: "SKIPPED", google_trends: "OK", pinterest: "SKIPPED", ebay: "SKIPPED", reddit: "OK" }
+      },
+      scorecard: [
+        { niche: "2027 vision board poster", total_competition: 1850, avg_price_usd: 26.5, trend_slope_90d: 12.5, fresh_winners_count: 10, opportunity_score: 97.5 },
+        { niche: "2027 daily planner hardcover", total_competition: 2400, avg_price_usd: 30.5, trend_slope_90d: 12.5, fresh_winners_count: 10, opportunity_score: 97.5 },
+        { niche: "retro tennis club sweatshirt", total_competition: 3200, avg_price_usd: 45.0, trend_slope_90d: 12.5, fresh_winners_count: 10, opportunity_score: 97.5 }
+      ],
+      winning_tags: [
+        { niche: "2027 vision board poster", tag: "2027 vision board", frequency: 10 },
+        { niche: "2027 vision board poster", tag: "vision board poster", frequency: 10 },
+        { niche: "2027 vision board poster", tag: "manifestation art", frequency: 10 }
+      ]
+    };
+
+    const DATA = window.DASHBOARD_DATA || FALLBACK_DATA;
+    let selectedNiche = DATA.scorecard?.[0]?.niche || "";
+
+    function init() {
+      // Freshness check
+      const runDate = new Date(DATA.last_run_at);
+      const hoursAgo = (Date.now() - runDate.getTime()) / 3600000;
+      document.getElementById("lastRunAt").textContent = runDate.toLocaleString("tr-TR");
+      const pill = document.getElementById("freshnessPill");
+      const pillText = document.getElementById("freshnessText");
+      if (hoursAgo > 26) {
+        pill.className = "pill stale";
+        pillText.textContent = `Gecikme (${Math.floor(hoursAgo)} saat önce)`;
+      } else {
+        pill.className = "pill fresh";
+        pillText.textContent = "Sistem Güncel";
+      }
+
+      document.getElementById("modeLabel").textContent = `Mod: ${DATA.meta?.mode || "LIVE"}`;
+
+      // Sources
+      const sourceNames = {
+        etsy: "Etsy Open API v3",
+        gelato: "Gelato Catalog API",
+        google_trends: "Google Trends (90g)",
+        pinterest: "Pinterest Trends v5",
+        ebay: "eBay Browse API",
+        reddit: "Reddit Ideas"
+      };
+      const sourceList = document.getElementById("sourceList");
+      sourceList.innerHTML = Object.entries(DATA.meta?.sources || {}).map(([k, v]) => `
+        <div class="source-item">
+          <span>${sourceNames[k] || k}</span>
+          <span class="badge ${v}">${v}</span>
+        </div>
+      `).join("");
+
+      // KPIs
+      const rows = DATA.scorecard || [];
+      document.getElementById("kpiNiches").textContent = rows.length;
+      if (rows.length) {
+        const top = [...rows].sort((a, b) => b.opportunity_score - a.opportunity_score)[0];
+        document.getElementById("kpiTopScore").textContent = top.opportunity_score;
+        document.getElementById("kpiTopNiche").textContent = top.niche;
+        const avgP = rows.reduce((s, r) => s + Number(r.avg_price_usd || 0), 0) / rows.length;
+        document.getElementById("kpiAvgPrice").textContent = "$" + avgP.toFixed(2);
+        const totalFresh = rows.reduce((s, r) => s + Number(r.fresh_winners_count || 0), 0);
+        document.getElementById("kpiFresh").textContent = totalFresh;
+      }
+
+      renderChart();
+      renderTable();
+      renderTags();
+    }
+
+    function renderChart() {
+      const rows = [...(DATA.scorecard || [])].sort((a, b) => b.opportunity_score - a.opportunity_score);
+      const container = document.getElementById("scoreChart");
+      container.innerHTML = rows.map(r => {
+        const s = Number(r.opportunity_score || 0);
+        const color = s >= 70 ? "var(--green)" : (s >= 45 ? "var(--accent)" : "var(--red)");
+        return `
+          <div class="bar-row">
+            <div class="bar-meta">
+              <span>${r.niche}</span>
+              <strong>${s} / 100</strong>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width:${Math.min(100, s)}%; background:${color};"></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderTable() {
+      const q = document.getElementById("searchInput").value.toLowerCase().trim();
+      const rows = (DATA.scorecard || []).filter(r => r.niche.toLowerCase().includes(q));
+      const tbody = document.getElementById("scoreTableBody");
+      tbody.innerHTML = rows.map(r => `
+        <tr class="${r.niche === selectedNiche ? 'selected' : ''}" onclick="selectNiche('${r.niche.replace(/'/g, "\\'")}')">
+          <td><strong>${r.niche}</strong></td>
+          <td><strong>${r.opportunity_score}</strong></td>
+          <td>${Number(r.total_competition).toLocaleString("tr-TR")}</td>
+          <td>$${Number(r.avg_price_usd).toFixed(2)}</td>
+          <td style="color:${r.trend_slope_90d >= 0 ? 'var(--green)' : 'var(--red)'}">
+            ${r.trend_slope_90d >= 0 ? '+' : ''}${r.trend_slope_90d}
+          </td>
+          <td>${r.fresh_winners_count}</td>
+        </tr>
+      `).join("");
+    }
+
+    function selectNiche(niche) {
+      selectedNiche = niche;
+      renderTable();
+      renderTags();
+    }
+
+    function renderTags() {
+      document.getElementById("tagsTitle").textContent = `Winning Tags: ${selectedNiche}`;
+      const tags = (DATA.winning_tags || []).filter(t => t.niche === selectedNiche);
+      const wrap = document.getElementById("tagsContainer");
+      if (!tags.length) {
+        wrap.innerHTML = `<span style="color:var(--muted); font-size:13px">Bu niş için etiket bulunamadı.</span>`;
+        return;
+      }
+      wrap.innerHTML = tags.map(t => `<div class="tag-chip">${t.tag}<span>×${t.frequency}</span></div>`).join("");
+    }
+
+    function copyTags() {
+      const tags = (DATA.winning_tags || []).filter(t => t.niche === selectedNiche).map(t => t.tag);
+      if (!tags.length) return;
+      navigator.clipboard.writeText(tags.join(", "));
+      alert("Etiketler panoya kopyalandı:\n" + tags.join(", "));
+    }
+
+    init();
+  </script>
+</body>
+</html>

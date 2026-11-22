@@ -1,0 +1,6 @@
+.env
+service_account.json
+pod_warehouse.db
+output/
+__pycache__/
+*.pyc

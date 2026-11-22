@@ -1,0 +1,22 @@
+# Telif / Marka Riski Taşıyan Kelimeler (Küçük harf yazın)
+real madrid
+barcelona
+galatasaray
+fenerbahce
+besiktas
+champions league
+premier league
+nike
+adidas
+puma
+disney
+marvel
+netflix
+harry potter
+stranger things
+taylor swift
+star wars
+pokemon
+nba
+fifa
+uefa
